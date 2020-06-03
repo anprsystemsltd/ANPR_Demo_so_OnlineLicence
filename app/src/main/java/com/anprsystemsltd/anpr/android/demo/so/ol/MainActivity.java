@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.hardware.Camera;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -22,7 +23,7 @@ import java.util.Vector;
 
 public class MainActivity extends Activity implements SurfaceHolder.Callback, Camera.PreviewCallback {
 
-    static String libraryName = "_HUN_Hungary"; // if the ANPR so library file name is 'lib_HUN_Hungary.so'; lib prefix is necessary!
+    static String libraryName = "_IND_India"; // if the ANPR so library file name is 'lib_HUN_Hungary.so'; lib prefix is necessary!
     static String classString = "com/anprsystemsltd/anpr/android/demo/so/ol/MainActivity;;";    // your activity package
 
     Context context = this;
@@ -44,6 +45,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
     int previewFormat;
 
     Vector<Bundle> results;
+
+    AnprOutput anprOutput;
 
 
     @Override
@@ -67,6 +70,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             toast.show();
             finish();
             System.exit(0);
+        }
+
+        if ("armeabi-v7a".equals(Build.CPU_ABI)) {
+            anprOutput = new AnprOutput_32();
+        } else if ("arm64-v8a".equals(Build.CPU_ABI)) {
+            anprOutput = new AnprOutput_64();
         }
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -132,13 +141,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
             }
 
             byte[] ret = ProcessImageCaller(imageData, pw, ph, 1, 1, 0, 1, 1);
-
-            if ((ret[0] == -24) & (ret[1] == 0) & (ret[2] == 0) & (ret[3] == 0) & (ret[20] <= 12)) {
-                if (ret[20] > 0) {
+            anprOutput.refreshFromBuffer(ret);
+            if (anprOutput.isValid) {
+                if (anprOutput.numberOfChars > 0) {
                     String recString = "";
-                    for (int i = 0; i < ret[20]; i++) {
-                        int ca = ret[8 + i];
-                        recString = recString + (char) ca;
+                    for (int i = 0; i < anprOutput.numberOfChars; i++) {
+                        recString = recString + anprOutput.charBuffer[i];
                     }
 
                     if (recString.equals(lastRecognitedString)) {
@@ -146,12 +154,12 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Ca
                         if (recCount >= 2) {
                             String result = recString + " - ";
 
-                            for (int i = 208; i < 208 + 8; i++) {
-                                if (ret[i] != 0) {
-                                    result = result + (char)ret[i];
+                            for (int i = 0; i < 8; i++) {
+                                if (anprOutput.syntaxName[i] != 0) {
+                                    result = result + anprOutput.syntaxName[i];
                                 }
                                 else {
-                                    i = 208 + 9;
+                                    break;
                                 }
                             }
 
